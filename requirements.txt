@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+sqlmodel
+asyncpg
+python-dotenv
+passlib[bcrypt]
