@@ -59,7 +59,8 @@ async def send_verification_email(email: str, username: str):
 async def signup(user_create: UserCreate, db: Session = Depends(get_db)):
     try:
         user = db.exec(select(User).where(User.username == user_create.username)).first()
-    except:
+    except Exception as e:
+        print(e)
         raise HTTPException(status_code=400, detail="Username already taken")
     hashed_password = pwd_context.hash(user_create.password)
     user = User(username=user_create.username, email=user_create.email, hashed_password=hashed_password, is_active=True, is_verified=False)
