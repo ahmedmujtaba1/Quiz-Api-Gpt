@@ -4,3 +4,4 @@ sqlmodel
 asyncpg
 python-dotenv
 passlib[bcrypt]
+aiosmtplib

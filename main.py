@@ -5,12 +5,15 @@ from typing import Optional
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from dotenv import load_dotenv
-import os
+import os, aiosmtplib
+from email.message import EmailMessage
 
 # Initialize environment and security
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
+EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Define models
@@ -62,6 +65,21 @@ def authenticate_user(db: Session, username: str, password: str):
         return False
     return user
 
+async def send_verification_email(email: str):
+    message = EmailMessage()
+    message["From"] = EMAIL_USER
+    message["To"] = email
+    message["Subject"] = "Verify your email"
+    message.set_content("Thank you for signing up. Please verify your email address.")
+
+    await aiosmtplib.send(
+        message,
+        hostname="smtp.gmail.com",
+        port=587,
+        start_tls=True,
+        username=EMAIL_USER,
+        password=EMAIL_PASSWORD
+    )
 @app.post("/login/")
 def login(response: Response, username: str, password: str, db: Session = Depends(get_db)):
     user = authenticate_user(db, username, password)
