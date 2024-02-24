@@ -2,11 +2,14 @@
 
 from pydantic import BaseModel
 
-class UserCreate(BaseModel):
-    username: str
-    password: str
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    username: str = Field(index=True)
+    email: str = Field(index=True)
+    hashed_password: str
     is_active: bool = True
-    role: str = "user" 
+    is_verified: bool = False  # Add this line in your models.py to reflect the new field
+    role: str = Field(default="user")
 
 class UserRead(BaseModel):
     id: int
