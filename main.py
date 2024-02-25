@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, Response, status, Cookie
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlmodel import SQLModel, Field, Session, create_engine, select
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 from passlib.context import CryptContext
 from dotenv import load_dotenv
@@ -17,6 +17,26 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 engine = create_engine(DATABASE_URL)
 
 app = FastAPI()
+
+class Topic(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+
+class Quiz(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    topic_id: Optional[int] = Field(default=None, foreign_key="topic.id")
+    questions: str  # This should be a JSON or related model in a full application
+
+class QuizCreate(SQLModel):
+    name: str
+    topic_id: int
+    questions: str
+
+class QuizUpdate(SQLModel):
+    name: Optional[str] = None
+    topic_id: Optional[int] = None
+    questions: Optional[str] = None
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -55,6 +75,48 @@ async def send_verification_email(email: str, username: str):
     message.set_content(f"Thank you for signing up. Please click the following link to verify your email: {verification_link}")
     await aiosmtplib.send(message, hostname="smtp.gmail.com", port=587, start_tls=True, username=EMAIL_USER, password=EMAIL_PASSWORD)
 
+@app.post("/quizzes/", response_model=Quiz)
+def create_quiz(quiz: QuizCreate, db: Session = Depends(get_db)):
+    db_quiz = Quiz.from_orm(quiz)
+    db.add(db_quiz)
+    db.commit()
+    db.refresh(db_quiz)
+    return db_quiz
+
+@app.get("/quizzes/", response_model=List[Quiz])
+def read_quizzes(db: Session = Depends(get_db)):
+    quizzes = db.exec(select(Quiz)).all()
+    return quizzes
+
+@app.get("/quizzes/{quiz_id}", response_model=Quiz)
+def read_quiz(quiz_id: int, db: Session = Depends(get_db)):
+    quiz = db.get(Quiz, quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    return quiz
+
+@app.patch("/quizzes/{quiz_id}", response_model=Quiz)
+def update_quiz(quiz_id: int, quiz: QuizUpdate, db: Session = Depends(get_db)):
+    db_quiz = db.get(Quiz, quiz_id)
+    if not db_quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    quiz_data = quiz.dict(exclude_unset=True)
+    for key, value in quiz_data.items():
+        setattr(db_quiz, key, value)
+    db.add(db_quiz)
+    db.commit()
+    db.refresh(db_quiz)
+    return db_quiz
+
+@app.delete("/quizzes/{quiz_id}")
+def delete_quiz(quiz_id: int, db: Session = Depends(get_db)):
+    quiz = db.get(Quiz, quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    db.delete(quiz)
+    db.commit()
+    return {"ok": True}
+
 @app.post("/signup/")
 async def signup(user_create: UserCreate, db: Session = Depends(get_db)):
     try:
@@ -81,6 +143,7 @@ def verify_email(username: str, db: Session = Depends(get_db)):
 
 @app.post("/login/")
 def login(credentials: HTTPBasicCredentials, response: Response, db: Session = Depends(get_db)):
+    # print(User.username, credentials.username)
     user = db.exec(select(User).where(User.username == credentials.username)).first()
     if not user or not pwd_context.verify(credentials.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
@@ -88,7 +151,7 @@ def login(credentials: HTTPBasicCredentials, response: Response, db: Session = D
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email not verified")
     session_token = f"{user.username}:{pwd_context.hash(credentials.password)}"
     response.set_cookie(key="session_token", value=session_token, httponly=True, expires=7200)  # 2 hours
-    return {"message": "Login successful"}
+    return {"message": "Login successful", "session_token": session_token}
 
 # Add other endpoints as needed
 
